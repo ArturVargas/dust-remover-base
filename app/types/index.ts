@@ -4,6 +4,7 @@ export type SelectedTokenInfo = {
   decimals: number;
   balance: string;
   coinGeckoId?: string;
+  allowance: string;
 };
 
 export type TokenBalance = {
@@ -12,12 +13,11 @@ export type TokenBalance = {
   address: `0x${string}`;
   balance: string;
   decimals: number;
-  loading: boolean;
-  error?: string;
+  allowance: string;
+  usdValue: number;
   coinGeckoId: string;
-  price?: number;
-  priceChange24h?: number;
-  marketCap?: number;
+  error?: string;
+  loading: boolean;
 };
 
 export type TokenPrice = {

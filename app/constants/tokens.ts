@@ -13,31 +13,36 @@ export const TOKENS = [
     name: "Build",
     address: "0x3c281a39944a2319aa653d81cfd93ca10983d234" as `0x${string}`,
     symbol: "BUILD",
-    coinGeckoId: "build-2"
+    coinGeckoId: "build-2",
+    decimals: 18
   },
   {
     name: "Apu",
     address: "0x7a2c5e7788e55ec0a7ba4aeec5b3da322718fb5e" as `0x${string}`,
     symbol: "APU",
-    coinGeckoId: "apu-2"
+    coinGeckoId: "apu-2",
+    decimals: 18
   },
   {
     name: "Based",
     address: "0x07d15798a67253d76cea61f0ea6f57aedc59dffb" as `0x${string}`,
     symbol: "BASED",
-    coinGeckoId: "based-2"
+    coinGeckoId: "based-2",
+    decimals: 18
   },
   {
     name: "Vain",
     address: "0x6c7ebb64e258f5712eeec83ceaf41c3dcbb534b1" as `0x${string}`,
     symbol: "VAIN",
-    coinGeckoId: "vainguard"
+    coinGeckoId: "vainguard",
+    decimals: 18
   },
   {
     name: "Nogs",
     address: "0x13741c5df9ab03e7aa9fb3bf1f714551dd5a5f8a" as `0x${string}`,
     symbol: "NOGS",
-    coinGeckoId: "noggles"
+    coinGeckoId: "noggles",
+    decimals: 18
   }
 ];
 

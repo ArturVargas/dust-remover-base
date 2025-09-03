@@ -1,91 +1,55 @@
-import { useState, useEffect } from "react"; // 👈 Se eliminó useMemo
+import { useState, useEffect } from "react";
 import { useAccount, useWriteContract, usePublicClient } from "wagmi";
 import { erc20Abi, maxUint256, parseUnits } from "viem";
 import { Button, Card, Icon, Skeleton } from "./ui";
 import { useTokenBalances } from "../hooks/useTokenBalances";
-import { TokenBalance, SelectedTokenInfo } from "../types";
+import { SelectedTokenInfo, TokenBalance } from "../types";
 import { PERMIT2_ADDRESS } from "../constants/tokens";
 
 type DustTokensProps = {
-  onSelectedTokensChange?: (tokens: SelectedTokenInfo[]) => void;
-  onApprovalChange?: (needsApproval: boolean) => void;
+  onSelectedTokensChange: (tokens: SelectedTokenInfo[]) => void;
+  onApprovalChange: (needsApproval: boolean) => void;
 };
 
-export function DustTokens({
-  onSelectedTokensChange,
-  onApprovalChange,
-}: DustTokensProps) {
+export function DustTokens({ onSelectedTokensChange, onApprovalChange }: DustTokensProps) {
   const { address } = useAccount();
   const publicClient = usePublicClient();
-  const { writeContractAsync } = useWriteContract();
-  const { tokenBalances, tokenPrices, isLoading, totalValue, refreshBalances } = useTokenBalances();
+  const { writeContractAsync, isPending: isTxPending } = useWriteContract();
+  const { tokenBalances, isLoading, totalValue, refreshBalances } = useTokenBalances();
   const [selectedTokens, setSelectedTokens] = useState<Set<string>>(new Set());
-  const [allowances, setAllowances] = useState<Record<string, bigint>>({});
-
-  useEffect(() => {
-    if (!onSelectedTokensChange) return;
-    const selectedList: SelectedTokenInfo[] = tokenBalances
-      .filter(t => selectedTokens.has(t.address) && !t.error && parseFloat(t.balance) > 0)
-      .map(t => ({ 
-        address: t.address, 
-        symbol: t.symbol, 
-        decimals: t.decimals, 
-        balance: t.balance, 
-        coinGeckoId: t.coinGeckoId 
-      }));
-    onSelectedTokensChange(selectedList);
-  }, [selectedTokens, tokenBalances, onSelectedTokensChange]);
-
-
-  const checkAllowance = async (token: TokenBalance) => {
-    if (!address || token.error || parseFloat(token.balance) <= 0) return;
-    try {
-      const allowance = await publicClient?.readContract({
-        address: token.address,
-        abi: erc20Abi,
-        functionName: 'allowance',
-        args: [address, PERMIT2_ADDRESS],
-      });
-      setAllowances(prev => ({ ...prev, [token.address]: allowance as bigint }));
-    } catch (e) {
-      console.error(`Error checking allowance for ${token.symbol}`, e);
-    }
-  };
-
-  useEffect(() => {
-    const checkAllAllowances = async () => {
-      await Promise.all(tokenBalances.map(checkAllowance));
-    };
-    if (address && tokenBalances.length > 0) {
-      checkAllAllowances();
-    }
-  }, [address, tokenBalances]);
 
   const handleApprove = async (token: TokenBalance) => {
     try {
-      await writeContractAsync({
+      const hash = await writeContractAsync({
         address: token.address,
         abi: erc20Abi,
         functionName: 'approve',
         args: [PERMIT2_ADDRESS, maxUint256],
       });
-      await checkAllowance(token);
+      await publicClient?.waitForTransactionReceipt({ hash });
+      await refreshBalances(); // Refrescamos todos los datos desde nuestra API
     } catch (e) {
       console.error("Approval failed", e);
     }
   };
 
+  // Este useEffect consume los datos del hook y se los pasa a los componentes padres.
   useEffect(() => {
-    if (!onApprovalChange) return;
-    const needsApproval = tokenBalances
+    const selectedList: SelectedTokenInfo[] = tokenBalances
       .filter(t => selectedTokens.has(t.address))
-      .some(t => {
-        const allowance = allowances[t.address] ?? BigInt(0);
-        const balance = parseUnits(t.balance, t.decimals);
-        return allowance < balance;
-      });
+      .map(t => ({ 
+        address: t.address, symbol: t.symbol, decimals: t.decimals, 
+        balance: t.balance, coinGeckoId: t.coinGeckoId, allowance: t.allowance
+      }));
+    onSelectedTokensChange(selectedList);
+
+    const needsApproval = selectedList.some(t => {
+      const allowance = BigInt(t.allowance || '0'); // <-- Convertimos el string de la API a BigInt
+      const balance = parseUnits(t.balance, t.decimals);
+      return allowance < balance; // <-- Ahora la comparación es entre dos BigInts
+    });
     onApprovalChange(needsApproval);
-  }, [selectedTokens, allowances, tokenBalances, onApprovalChange]);
+  }, [selectedTokens, tokenBalances, onSelectedTokensChange, onApprovalChange]);
 
   const toggleTokenSelection = (tokenAddress: string) => {
     const newSelected = new Set(selectedTokens);
@@ -98,15 +62,11 @@ export function DustTokens({
   };
 
   const selectAllTokens = () => {
-    const tokensWithBalance = tokenBalances
-      .filter(token => !token.error && parseFloat(token.balance) > 0)
-      .map(token => token.address);
-    setSelectedTokens(new Set(tokensWithBalance));
+    const allTokenAddresses = tokenBalances.map(token => token.address);
+    setSelectedTokens(new Set(allTokenAddresses));
   };
 
-  const deselectAllTokens = () => {
-    setSelectedTokens(new Set());
-  };
+  const deselectAllTokens = () => setSelectedTokens(new Set());
 
   return (
     <Card title="Dust Tokens en Base">
@@ -212,19 +172,15 @@ export function DustTokens({
                     (token) => !token.error && parseFloat(token.balance) > 0,
                   )
                   .map((token) => {
-                    const allowance = allowances[token.address] ?? BigInt(0);
+                    const allowance = BigInt(token.allowance || '0');
                     const balanceWei = parseUnits(
                       token.balance,
                       token.decimals,
                     );
                     const needsApproval = allowance < balanceWei;
-                    const price =
-                      tokenPrices.find((p) => p.id === token.coinGeckoId)
-                        ?.price || 0;
-                    const priceChange24h =
-                      tokenPrices.find((p) => p.id === token.coinGeckoId)
-                        ?.priceChange24h || 0;
-                    const balanceInUsd = parseFloat(token.balance) * price;
+                    const price = token.usdValue / parseFloat(token.balance) || 0;
+                    const priceChange24h = 0; // No disponible en la API actual
+                    const balanceInUsd = token.usdValue || 0;
 
                     return (
                       <div key={token.address} className="flex flex-col gap-2">
@@ -297,9 +253,10 @@ export function DustTokens({
                               size="sm"
                               variant="outline"
                               onClick={() => handleApprove(token)}
-                              className="w-full sm:w-auto" // Se ajusta al tamaño
+                              disabled={isTxPending}
+                              className="w-full sm:w-auto"
                             >
-                              Aprobar {token.symbol} para Consolidar
+                              {isTxPending ? "Aprobando..." : `Aprobar ${token.symbol}`}
                             </Button>
                           </div>
                         )}

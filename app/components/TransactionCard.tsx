@@ -133,9 +133,9 @@ export function TransactionCard({ selectedTokens, needsApproval }: TransactionCa
       });
 
       setStatus(`Transacción enviada: ${txHash}. Esperando confirmación...`);
-      await publicClient.waitForTransactionReceipt({ hash: txHash });
+      await publicClient?.waitForTransactionReceipt({ hash: txHash });
 
-      setStatus("¡Éxito! Tu dust ha sido consolidado.");
+      setStatus("¡Éxito! Tu dust ha sido removido.");
       
     } catch (e: unknown) {
       console.error(e);
@@ -149,11 +149,11 @@ export function TransactionCard({ selectedTokens, needsApproval }: TransactionCa
 
 
   return (
-    <Card title="Consolidar tu Dust">
+    <Card title="Remover tu Dust">
       <div className="space-y-4">
         <div className="grid grid-cols-12 gap-2 w-full max-w-sm mx-auto">
           <label className="col-span-12 text-sm text-[var(--app-foreground-muted)]">
-            Consolidar a
+            Cambiar a
           </label>
           {/* El select para elegir WETH (deshabilitado por ahora) */}
           <select
@@ -180,11 +180,11 @@ export function TransactionCard({ selectedTokens, needsApproval }: TransactionCa
               onClick={handleSwap}
               disabled={isLoading || needsApproval || selectedTokens.length === 0}
             >
-              {isLoading ? "Procesando..." : "Consolidar Dust"}
+              {isLoading ? "Procesando..." : "Remover tu Dust"}
             </Button>
           ) : (
             <p className="text-yellow-400 text-sm text-center">
-              Conecta tu wallet para consolidar
+              Conecta tu wallet para detectar y remover tu Dust
             </p>
           )}
         </div>
