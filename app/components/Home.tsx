@@ -3,17 +3,20 @@ import { DustTokens } from "./DustTokens";
 import { TransactionCard } from "./TransactionCard";
 import { SelectedTokenInfo } from "../types";
 
-type HomeProps = {
-  setActiveTab: (tab: string) => void;
-};
-
-export function Home({ setActiveTab }: HomeProps) {
+export function Home() {
   const [selectedDustTokens, setSelectedDustTokens] = useState<SelectedTokenInfo[]>([]);
+  const [needsApproval, setNeedsApproval] = useState(false);
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <DustTokens onSelectedTokensChange={setSelectedDustTokens} />
-      <TransactionCard selectedTokens={selectedDustTokens} />
+      <DustTokens 
+        onSelectedTokensChange={setSelectedDustTokens}
+        onApprovalChange={setNeedsApproval} // Pasa la función de callback
+      />
+      <TransactionCard 
+        selectedTokens={selectedDustTokens}
+        needsApproval={needsApproval} // Pasa el estado al componente hijo
+      />
     </div>
   );
 }

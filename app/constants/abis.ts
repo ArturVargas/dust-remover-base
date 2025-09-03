@@ -1,88 +1,268 @@
-export const quoterAbiMin = [
-  { 
-    name: "quoteExactInputSingle", 
-    type: "function", 
-    stateMutability: "view", 
-    inputs: [{ 
-      type: "tuple", 
-      components: [
-        { name: "tokenIn", type: "address" }, 
-        { name: "tokenOut", type: "address" }, 
-        { name: "amountIn", type: "uint256" }, 
-        { name: "fee", type: "uint24" }, 
-        { name: "sqrtPriceLimitX96", type: "uint160" }
-      ] 
-    }], 
-    outputs: [{ name: "amountOut", type: "uint256" }] 
-  },
-] as const;
-
-export const permit2AbiMin = [
-  { 
-    name: "permit", 
-    type: "function", 
+export const dustCollectorAbi = [
+  {
     inputs: [
-      { type: "address" }, 
-      { 
-        type: "tuple[]", 
+      {
+        internalType: "address",
+        name: "_permit2",
+        type: "address",
+      },
+      {
+        internalType: "address",
+        name: "_swapRouterV2",
+        type: "address",
+      },
+      {
+        internalType: "address",
+        name: "_weth9",
+        type: "address",
+      },
+    ],
+    stateMutability: "nonpayable",
+    type: "constructor",
+  },
+  {
+    inputs: [
+      {
+        internalType: "address",
+        name: "owner",
+        type: "address",
+      },
+    ],
+    name: "OwnableInvalidOwner",
+    type: "error",
+  },
+  {
+    inputs: [
+      {
+        internalType: "address",
+        name: "account",
+        type: "address",
+      },
+    ],
+    name: "OwnableUnauthorizedAccount",
+    type: "error",
+  },
+  {
+    anonymous: false,
+    inputs: [
+      {
+        indexed: true,
+        internalType: "address",
+        name: "previousOwner",
+        type: "address",
+      },
+      {
+        indexed: true,
+        internalType: "address",
+        name: "newOwner",
+        type: "address",
+      },
+    ],
+    name: "OwnershipTransferred",
+    type: "event",
+  },
+  {
+    inputs: [],
+    name: "renounceOwnership",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [
+      {
         components: [
-          { 
-            name: "details", 
-            type: "tuple", 
+          {
             components: [
-              { name: "token", type: "address" }, 
-              { name: "amount", type: "uint160" }, 
-              { name: "expiration", type: "uint48" }, 
-              { name: "nonce", type: "uint48" }
-            ] 
-          }, 
-          { name: "spender", type: "address" }, 
-          { name: "sigDeadline", type: "uint256" }
-        ] 
-      }, 
-      { type: "bytes" }
-    ], 
-    outputs: [] 
+              {
+                internalType: "address",
+                name: "token",
+                type: "address",
+              },
+              {
+                internalType: "uint256",
+                name: "amount",
+                type: "uint256",
+              },
+            ],
+            internalType: "struct IPermit2.TokenPermissions",
+            name: "permitted",
+            type: "tuple",
+          },
+          {
+            internalType: "uint256",
+            name: "nonce",
+            type: "uint256",
+          },
+          {
+            internalType: "uint256",
+            name: "deadline",
+            type: "uint256",
+          },
+        ],
+        internalType: "struct IPermit2.PermitTransferFrom[]",
+        name: "tokensToSwap",
+        type: "tuple[]",
+      },
+      {
+        internalType: "address[]",
+        name: "tokenInAddresses",
+        type: "address[]",
+      },
+      {
+        internalType: "uint256[]",
+        name: "minAmountsOut",
+        type: "uint256[]",
+      },
+      {
+        internalType: "uint256",
+        name: "nonce",
+        type: "uint256",
+      },
+      {
+        internalType: "bytes",
+        name: "signature",
+        type: "bytes",
+      },
+      {
+        internalType: "uint256",
+        name: "deadline",
+        type: "uint256",
+      },
+    ],
+    name: "swapDust",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
   },
-  { 
-    name: "transferFrom", 
-    type: "function", 
+  {
     inputs: [
-      { type: "address" }, 
-      { type: "address" }, 
-      { type: "uint160" }, 
-      { type: "address" }
-    ], 
-    outputs: [] 
+      {
+        internalType: "address",
+        name: "newOwner",
+        type: "address",
+      },
+    ],
+    name: "transferOwnership",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
   },
-  { 
-    name: "nonceBitmap", 
-    type: "function", 
-    stateMutability: "view", 
+  {
     inputs: [
-      { type: "address" }, 
-      { type: "uint256" }
-    ], 
-    outputs: [{ type: "uint256" }] 
+      {
+        internalType: "uint256",
+        name: "_amount",
+        type: "uint256",
+      },
+    ],
+    name: "withdrawFees",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "FEE_BPS",
+    outputs: [
+      {
+        internalType: "uint256",
+        name: "",
+        type: "uint256",
+      },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "MULTICALL3",
+    outputs: [
+      {
+        internalType: "contract IMulticall3",
+        name: "",
+        type: "address",
+      },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "owner",
+    outputs: [
+      {
+        internalType: "address",
+        name: "",
+        type: "address",
+      },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "permit2",
+    outputs: [
+      {
+        internalType: "contract IPermit2",
+        name: "",
+        type: "address",
+      },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "totalFees",
+    outputs: [
+      {
+        internalType: "uint256",
+        name: "",
+        type: "uint256",
+      },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "UNISWAP_ROUTER",
+    outputs: [
+      {
+        internalType: "contract IUniswapV2Router02",
+        name: "",
+        type: "address",
+      },
+    ],
+    stateMutability: "view",
+    type: "function",
+  },
+  {
+    inputs: [],
+    name: "WETH9",
+    outputs: [
+      {
+        internalType: "address",
+        name: "",
+        type: "address",
+      },
+    ],
+    stateMutability: "view",
+    type: "function",
   },
 ] as const;
 
-export const uniswapRouterAbi = [
-  { 
-    name: "exactInputSingle", 
-    type: "function", 
-    inputs: [{ 
-      type: "tuple", 
-      components: [
-        { name: "tokenIn", type: "address" }, 
-        { name: "tokenOut", type: "address" }, 
-        { name: "fee", type: "uint24" }, 
-        { name: "recipient", type: "address" }, 
-        { name: "amountIn", type: "uint256" }, 
-        { name: "amountOutMinimum", type: "uint256" }, 
-        { name: "sqrtPriceLimitX96", type: "uint160" }
-      ] 
-    }], 
-    outputs: [{ type: "uint256" }] 
+export const uniswapV2RouterAbi = [
+  {
+    name: "getAmountsOut",
+    type: "function",
+    stateMutability: "view",
+    inputs: [
+      { name: "amountIn", type: "uint256" },
+      { name: "path", type: "address[]" },
+    ],
+    outputs: [{ name: "amounts", type: "uint256[]" }],
   },
 ] as const;

@@ -1,247 +1,190 @@
-import { useCallback, useEffect, useState } from "react";
-import { useAccount, useSignTypedData } from "wagmi";
+import { useState } from "react";
+import { useAccount, useSignTypedData, useWriteContract, usePublicClient, useWalletClient } from "wagmi";
 import { parseUnits } from "viem";
-import {
-  Transaction,
-  TransactionButton,
-  TransactionToast,
-  TransactionToastAction,
-  TransactionToastIcon,
-  TransactionToastLabel,
-  TransactionError,
-  TransactionResponse,
-  TransactionStatusAction,
-  TransactionStatusLabel,
-  TransactionStatus,
-} from "@coinbase/onchainkit/transaction";
-import { useNotification } from "@coinbase/onchainkit/minikit";
-
-import { Card } from "./ui";
+import { Card, Button } from "./ui";
 import { SelectedTokenInfo } from "../types";
-import {
-  USDC_ADDRESS,
-  WETH_ADDRESS,
-  SLIPPAGE_TOLERANCE_BPS,
-} from "../constants/tokens";
+import { DUST_COLLECTOR_ADDRESS, UNISWAP_V2_ROUTER_ADDRESS, WETH_ADDRESS, PERMIT2_ADDRESS, SLIPPAGE_TOLERANCE_BPS } from "../constants/tokens";
+import { dustCollectorAbi, uniswapV2RouterAbi } from "../constants/abis";
 
 type TransactionCardProps = {
-  selectedTokens?: SelectedTokenInfo[];
-  signerAddress?: `0x${string}`;
+  selectedTokens: SelectedTokenInfo[];
+  needsApproval: boolean;
 };
 
-const isHexAddress = (s: unknown): s is `0x${string}` =>
-  typeof s === "string" && /^0x[a-fA-F0-9]{40}$/.test(s);
+const permit2Domain = {
+  name: "Permit2",
+  chainId: 8453, // Base Mainnet
+  verifyingContract: PERMIT2_ADDRESS,
+} as const;
 
-export function TransactionCard({
-  selectedTokens = [],
-  signerAddress,
-}: TransactionCardProps) {
+const permit2Types = {
+  PermitBatchTransferFrom: [
+    { name: "permitted", type: "PermitTransferFrom[]" },
+    { name: "signer", type: "address" },
+    { name: "nonce", type: "uint256" },
+    { name: "deadline", type: "uint256" },
+  ],
+  PermitTransferFrom: [
+    { name: "permitted", type: "TokenPermissions" },
+    { name: "nonce", type: "uint256" },
+    { name: "deadline", type: "uint256" },
+  ],
+  TokenPermissions: [
+    { name: "token", type: "address" },
+    { name: "amount", type: "uint256" },
+  ],
+} as const;
+
+export function TransactionCard({ selectedTokens, needsApproval }: TransactionCardProps) {
   const { address } = useAccount();
+  const publicClient = usePublicClient();
+  const { data: walletClient } = useWalletClient();
+  const { writeContractAsync } = useWriteContract();
   const { signTypedDataAsync } = useSignTypedData();
-  const [destToken, setDestToken] = useState<"USDC" | "WETH">("USDC");
-  const [error, setError] = useState<string>("");
-  const [priceMap, setPriceMap] = useState<Record<string, number>>({});
+  
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [status, setStatus] = useState("");
 
-  useEffect(() => {
-    const loadPrices = async () => {
-      try {
-        const resp = await fetch("/api/token-prices");
-        const data = await resp.json();
-        if (data?.success) {
-          const map: Record<string, number> = {};
-          for (const p of data.data) map[p.id] = p.price;
-          setPriceMap(map);
-        }
-      } catch {
-        // Silently handle error
-      }
-    };
-    loadPrices();
-  }, []);
 
-  const sendNotification = useNotification();
+  const handleSwap = async () => {
+    if (!address || !publicClient || !walletClient) {
+      setError("Por favor, conecta tu wallet.");
+      return;
+    }
+    if (selectedTokens.length === 0) {
+      setError("No hay tokens seleccionados.");
+      return;
+    }
+    if (selectedTokens.length > 5) {
+      setError("Puedes seleccionar un máximo de 5 tokens.");
+      return;
+    }
+    if (needsApproval) {
+      setError("Algunos tokens necesitan ser aprobados primero.");
+      return;
+    }
 
-  const handleSuccess = useCallback(
-    async (response: TransactionResponse) => {
-      const transactionHash = response.transactionReceipts[0].transactionHash;
-      console.log(`Transaction successful: ${transactionHash}`);
-      await sendNotification({
-        title: "¡Felicidades!",
-        body: `Has enviado tu transacción, ${transactionHash}!`,
-      });
-    },
-    [sendNotification],
-  );
-
-  const fetchCalls = useCallback(async () => {
+    setIsLoading(true);
     setError("");
+    setStatus("Preparando transacción...");
 
-    if (!address || selectedTokens.length === 0) {
-      setError("Conecta tu wallet y selecciona tokens.");
-      return [];
-    }
-
-    const destAddress = destToken === "USDC" ? USDC_ADDRESS : WETH_ADDRESS;
-
-    // Filtrar dust <= $2
-    const dustOnly = selectedTokens.filter((t) => {
-      const price = t.coinGeckoId ? (priceMap[t.coinGeckoId] ?? 0) : 0;
-      const usd = parseFloat(t.balance) * price;
-      return usd > 0 && usd <= 2;
-    });
-
-    if (dustOnly.length === 0) {
-      setError("No hay tokens con valor <= $2 USD para limpiar");
-      return [];
-    }
-
-    // Pedir quotes y construir calls válidos
-    const validCalls: {
-      to: `0x${string}`;
-      data: `0x${string}`;
-      value?: bigint;
-    }[] = [];
-
-    for (const t of dustOnly) {
-      try {
-        const amountIn = parseUnits(t.balance, t.decimals);
-        if (amountIn <= BigInt(0)) continue;
-
-        const resp = await fetch("/api/swap-quote", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            network: "base",
-            toToken: destAddress,
-            fromToken: t.address,
-            fromAmount: amountIn.toString(),
-            taker: address,
-            signerAddress: signerAddress,
-            slippageBps: SLIPPAGE_TOLERANCE_BPS,
-          }),
-        });
-
-        const data = await resp.json();
-
-        // Errores del backend
-        if (!resp.ok) {
-          console.warn("Quote error:", data);
-          continue;
-        }
-
-        if (data.permit2?.eip712) {
-          const { domain, types, message, primaryType } = data.permit2.eip712;
-          await signTypedDataAsync({
-            account: signerAddress, // EOA firma
-            domain,
-            types,
-            message,
-            primaryType, // "PermitTransferFrom"
+    try {
+      // 1. Calcular minAmountsOut para cada token
+      setStatus("Calculando precios...");
+      const minAmountsOut = await Promise.all(
+        selectedTokens.map(async (token) => {
+          const amountIn = parseUnits(token.balance, token.decimals);
+          if (amountIn === BigInt(0)) return BigInt(0);
+          const amounts = await publicClient.readContract({
+            address: UNISWAP_V2_ROUTER_ADDRESS,
+            abi: uniswapV2RouterAbi,
+            functionName: 'getAmountsOut',
+            args: [amountIn, [token.address, WETH_ADDRESS]],
           });
-          // La firma es verificada por el router (via Permit2). No hace falta adjuntarla aquí.
-        }
-        const to = data?.transaction?.to;
-        const callData = data?.transaction?.data;
-        const valueStr = data?.transaction?.value;
+          const amountOut = amounts[1];
+          return (amountOut * BigInt(10000 - SLIPPAGE_TOLERANCE_BPS)) / BigInt(10000);
+        })
+      );
 
-        // Validaciones estrictas para evitar "to is required"
-        if (
-          !isHexAddress(to) ||
-          typeof callData !== "string" ||
-          !callData.startsWith("0x")
-        ) {
-          console.warn("Quote sin 'to'/'data' válidos, se omite:", {
-            to,
-            callData,
-          });
-          continue;
-        }
+      // 2. Preparar datos para la firma y el contrato
+      const deadline = BigInt(Math.floor(Date.now() / 1000) + 1200); // 20 minutos
+      const nonce = BigInt(Math.floor(Date.now() / 1000));
+      
+      const tokensToSwap = selectedTokens.map(token => ({
+        permitted: {
+          token: token.address,
+          amount: parseUnits(token.balance, token.decimals),
+        },
+        nonce: nonce, // El nonce individual es ignorado, pero requerido por el struct
+        deadline: deadline,
+      }));
+      
+      const message = {
+        permitted: tokensToSwap,
+        signer: address,
+        nonce: nonce,
+        deadline: deadline,
+      };
 
-        const value =
-          typeof valueStr === "string" ? BigInt(valueStr) : undefined;
+      // 3. Solicitar firma EIP-712 al usuario
+      setStatus("Esperando firma...");
+      const signature = await signTypedDataAsync({
+        domain: permit2Domain,
+        types: permit2Types,
+        primaryType: 'PermitBatchTransferFrom',
+        message,
+      });
 
-        validCalls.push({
-          to,
-          data: callData as `0x${string}`,
-          value,
-        });
-      } catch (e) {
-        console.warn(`Quote falló para ${t.symbol}:`, e);
-        // seguimos con los demás
-      }
+      // 4. Llamar a la función swapDust
+      setStatus("Enviando transacción...");
+      const txHash = await writeContractAsync({
+        address: DUST_COLLECTOR_ADDRESS,
+        abi: dustCollectorAbi,
+        functionName: 'swapDust',
+        args: [
+          tokensToSwap,
+          selectedTokens.map(t => t.address),
+          minAmountsOut,
+          nonce,
+          signature,
+          deadline,
+        ],
+      });
+
+      setStatus(`Transacción enviada: ${txHash}. Esperando confirmación...`);
+      await publicClient.waitForTransactionReceipt({ hash: txHash });
+
+      setStatus("¡Éxito! Tu dust ha sido consolidado.");
+      
+    } catch (e: unknown) {
+      console.error(e);
+      const errorMessage = (e as { shortMessage?: string; message?: string }).shortMessage || (e as { message?: string }).message || "La transacción falló.";
+      setError(errorMessage);
+      setStatus("");
+    } finally {
+      setIsLoading(false);
     }
+  };
 
-    if (validCalls.length === 0) {
-      setError("No se pudieron preparar swaps válidos (falta 'to'/'data').");
-      return [];
-    }
-
-    // Opcional: limitar a 1–3 llamadas por UX
-    return validCalls.slice(0, 3);
-  }, [
-    address,
-    signerAddress,
-    selectedTokens,
-    destToken,
-    priceMap,
-    signTypedDataAsync,
-  ]);
 
   return (
-    <Card title="Remove your dust">
+    <Card title="Consolidar tu Dust">
       <div className="space-y-4">
         <div className="grid grid-cols-12 gap-2 w-full max-w-sm mx-auto">
           <label className="col-span-12 text-sm text-[var(--app-foreground-muted)]">
-            Swap to
+            Consolidar a
           </label>
+          {/* El select para elegir WETH (deshabilitado por ahora) */}
           <select
-            value={destToken}
-            onChange={(e) => setDestToken(e.target.value as "USDC" | "WETH")}
-            className="col-span-10 col-start-2 px-3 py-2 rounded-lg bg-[var(--app-card-bg)] border border-[var(--app-card-border)] text-[var(--app-foreground)] focus:outline-none focus:ring-1 focus:ring-[var(--app-accent)]"
+            value="WETH"
+            disabled
+            className="col-span-10 col-start-2 px-3 py-2 rounded-lg bg-[var(--app-card-bg)] border border-[var(--app-card-border)] text-[var(--app-foreground)]"
           >
-            <option value="USDC">USDC</option>
             <option value="WETH">WETH</option>
           </select>
         </div>
 
         <div className="text-center text-[var(--app-foreground-muted)] text-sm">
           {selectedTokens.length > 0
-            ? `${selectedTokens.length} token(s) selected`
-            : `No tokens selected`}
+            ? `${selectedTokens.length} token(s) seleccionados`
+            : `No hay tokens seleccionados`}
         </div>
 
         {error && <p className="text-center text-xs text-red-400">{error}</p>}
+        {status && <p className="text-center text-xs text-blue-400">{status}</p>}
 
-        <div className="flex flex-col items-center">
+        <div className="flex flex-col items-center pt-4">
           {address ? (
-            <Transaction
-              isSponsored
-              calls={fetchCalls}
-              capabilities={{
-                paymasterService: {
-                  url: process.env
-                    .NEXT_PUBLIC_PAYMASTER_AND_BUNDLER_ENDPOINT as string,
-                },
-              }}
-              onSuccess={handleSuccess}
-              onError={(error: TransactionError) =>
-                console.error("Transaction failed:", error)
-              }
+            <Button
+              onClick={handleSwap}
+              disabled={isLoading || needsApproval || selectedTokens.length === 0}
             >
-              <TransactionButton className="text-white text-md" />
-              <TransactionStatus>
-                <TransactionStatusAction />
-                <TransactionStatusLabel />
-              </TransactionStatus>
-              <TransactionToast className="mb-4">
-                <TransactionToastIcon />
-                <TransactionToastLabel />
-                <TransactionToastAction />
-              </TransactionToast>
-            </Transaction>
+              {isLoading ? "Procesando..." : "Consolidar Dust"}
+            </Button>
           ) : (
-            <p className="text-yellow-400 text-sm text-center mt-2">
-              Connect your wallet to send a transaction
+            <p className="text-yellow-400 text-sm text-center">
+              Conecta tu wallet para consolidar
             </p>
           )}
         </div>

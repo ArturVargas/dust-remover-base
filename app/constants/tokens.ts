@@ -1,14 +1,11 @@
 // Direcciones y configuración
+export const DUST_COLLECTOR_ADDRESS = "0xD4A1D399158cC4B2F18bcBb0a4eee9082b66a335" as const;
+
 export const PERMIT2_ADDRESS = "0x000000000022D473030F116dDEE9F6B43aC78BA3" as const;
-export const UNISWAP_ROUTER = "0x3fC91A3afd70395Cd496C647d5a6CC9D4B2b7FAD" as const; // Universal Router
-export const SWAP_ROUTER = "0xE592427A0AEce92De3Edee1F18E0157C05861564" as const; // Legacy SwapRouter V3
-export const QUOTER_ADDRESS = "0x3d4e44Eb1374240CE5F1B871ab261CD16335B76a" as const; // Quoter v3 Base
-export const USDC_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as const;
+export const UNISWAP_V2_ROUTER_ADDRESS = "0x2626664c2603336E57B271c5C0b26F421741e481" as const; // BaseSwap Router
 export const WETH_ADDRESS = "0x4200000000000000000000000000000000000006" as const;
-export const FEE_COLLECTOR = (process.env.NEXT_PUBLIC_FEE_COLLECTOR || "") as `0x${string}`;
+
 export const SLIPPAGE_TOLERANCE_BPS = 50; // 0.5%
-export const DEFAULT_POOL_FEE = 500; // 0.05%
-export const FEE_TIERS: number[] = [500, 3000, 10000];
 
 // Configuración de tokens
 export const TOKENS = [
@@ -44,7 +41,8 @@ export const TOKENS = [
   }
 ];
 
-// Múltiples RPCs para Base mainnet con fallback
+// RPC público de Blast API solo para lectura (balances, allowances, etc.)
+// OnchainKit se usa para transacciones y paymaster
 export const RPC_URLS = [
   'https://base-mainnet.public.blastapi.io'
 ];
